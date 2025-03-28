@@ -27,21 +27,36 @@ app.post('/translate', async (req, res) => {
             messages: [
                 {
                     role: 'user',
-                    content: `Translate this English sentence to Gen Z slang. Keep it fun, relatable, and short. Only return the Gen Z version with no explanation.\n\n"${content}"`,
+                    content: `You're a Gen Z slang expert. Convert the following English sentence into Gen Z language.
+
+1. Return a JSON object.
+2. Include key-value pairs mapping as many meaningful words or phrases as possible, even simple ones like "today" or "isn't it".
+3. Include a field "fullTranslation" with the final Gen Z sentence.
+4. Keep it short, relatable, and fun.
+
+Sentence:
+"${content}"`,
                 },
             ],
-            response_format: {
-                "type": "text"
-            },
             temperature: 0.8,
-            max_completion_tokens: 100,
+            max_completion_tokens: 200,
             top_p: 1,
             frequency_penalty: 0,
             presence_penalty: 0,
             store: true
         });
-        const translated = completion.choices[0]?.message?.content?.trim();
-        res.json({ original: content, genz: translated });
+        let result = completion.choices[0].message?.content || '{}';
+        console.log(result);
+        result = result.replace(/```json|```/g, '').trim();
+        const json = JSON.parse(result);
+        const fullTranslation = json.fullTranslation || '';
+        delete json.fullTranslation;
+        // Save new mappings
+        //const insert = db.prepare(`INSERT OR IGNORE INTO WordMappings (english, genz) VALUES (?, ?)`);
+        //Object.entries(json).forEach(([english, genz]) => {
+        //     insert.run(english, genz);
+        //   });
+        return res.json({ original: content, genz: fullTranslation, wordMap: json });
     }
     catch (error) {
         if (error.response) {
