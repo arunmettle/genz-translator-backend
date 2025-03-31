@@ -3,9 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.translate = void 0;
+const express_1 = require("express");
 const openaiService_1 = __importDefault(require("../services/openaiService"));
-const translate = async (req, res) => {
+const wordService_1 = require("../services/wordService");
+const router = (0, express_1.Router)();
+router.post("/", async (req, res) => {
     const { content } = req.body;
     if (!content) {
         return res.status(400).json({ error: "Content is required" });
@@ -17,45 +19,51 @@ const translate = async (req, res) => {
                 {
                     role: "user",
                     content: `You're a Gen Z slang expert. Convert the following English sentence into Gen Z language.
-
-          1. Return a JSON object.
-          2. Include key-value pairs mapping as many meaningful words or phrases as possible, even simple ones like "today" or "isn't it".
-          3. Include a field "fullTranslation" with the final Gen Z sentence.
-          4. Keep it short, relatable, and fun.
+          
+          1. Return only a valid JSON object. Do not include any explanation or introductory text.
+          2. The JSON object should include:
+             - "fullTranslation": The entire Gen Z sentence.
+             - Key-value pairs mapping individual words or phrases to their Gen Z equivalents.
+          3. Do not provide any additional text or explanations. Only return a valid JSON object.
 
           Sentence:
           "${content}"`,
                 },
             ],
             temperature: 0.8,
-            max_completion_tokens: 200,
+            max_tokens: 200,
             top_p: 1,
             frequency_penalty: 0,
             presence_penalty: 0,
-            store: true,
         });
-        let result = completion.choices[0].message?.content || "{}";
-        console.log(result);
-        result = result.replace(/```json|```/g, "").trim();
-        const json = JSON.parse(result);
-        const fullTranslation = json.fullTranslation || "";
-        delete json.fullTranslation;
-        return res.json({
-            original: content,
-            genz: fullTranslation,
-            wordMap: json,
-        });
+        let result = completion.choices[0].message?.content || "";
+        console.log("Raw GPT Response:", result);
+        // Extract the JSON part from the response
+        const jsonMatch = result.match(/(\{.*\})/s); // Improved regex pattern
+        if (!jsonMatch) {
+            throw new Error("Failed to extract JSON from GPT response");
+        }
+        const jsonString = jsonMatch[0].trim();
+        try {
+            const jsonObject = JSON.parse(jsonString); // Safely parse the extracted JSON block
+            console.log("Parsed JSON Object:", jsonObject);
+            const fullTranslation = jsonObject.fullTranslation || "";
+            delete jsonObject.fullTranslation;
+            await (0, wordService_1.saveWordMappings)(jsonObject);
+            return res.json({
+                original: content,
+                genz: fullTranslation,
+                wordMap: jsonObject,
+            });
+        }
+        catch (parseError) {
+            console.error("JSON Parsing Error:", parseError.message);
+            throw new Error("Extracted string is not valid JSON.");
+        }
     }
     catch (error) {
-        if (error.response) {
-            console.error("OpenAI Error:", error.response.status, error.response.data);
-            return res
-                .status(error.response.status)
-                .json({ error: error.response.data });
-        }
-        console.error("Unexpected Error:", error);
+        console.error("Error:", error.message);
         res.status(500).json({ error: "Translation failed" });
     }
-};
-exports.translate = translate;
-exports.default = exports.translate;
+});
+exports.default = router;

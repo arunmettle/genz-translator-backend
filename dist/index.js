@@ -10,7 +10,6 @@ dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 console.log("Starting the server...");
-console.log("OPENAI_API_KEY:", process.env.OPENAI_API_KEY);
 app.use(express_1.default.json());
 app.use("/translate", translate_1.default);
 app.listen(PORT, () => {
